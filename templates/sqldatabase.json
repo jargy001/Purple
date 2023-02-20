@@ -95,8 +95,7 @@
       "StorageType": "Standard_LRS",
       "Version": "StorageV2"
     },
-    "staType": "LRS",
-    "vNetServiceEndPoint": "[variables('resourceIDSubnet')]"
+    "staType": "LRS"
   },
   "resources": [
     {
@@ -137,7 +136,7 @@
       "name": "[variables('sqlserverName')]",
       "type": "Microsoft.Sql/servers",
       "location": "[resourceGroup().location]",
-      "apiVersion": "2014-04-01",
+      "apiVersion": "2021-08-01-preview",
       "dependsOn": [],
       "tags": {
         "Owner": "[variables('sqlSRVTags').Owner]",
@@ -147,22 +146,10 @@
       "properties": {
         "administratorLogin": "[parameters('sqlAdministratorLoginUsername')]",
         "administratorLoginPassword": "[concat('@Microsoft.KeyVault(SecretUri=', variables('keyVaultUri'), '/secrets/', variables('secretName'), ')')]",
-        "version": "12.0"
+        "version": "12.0",
+        "publicNetworkAccess": "Disabled"
       },
       "resources": [
-        {
-          "name": "Azure",
-          "type": "firewallRules",
-          "location": "[resourceGroup().location]",
-          "apiVersion": "2014-04-01",
-          "dependsOn": [
-            "[resourceId('Microsoft.Sql/servers', variables('sqlserverName'))]"
-          ],
-          "properties": {
-            "startIpAddress": "255.255.255.255",
-            "endIpAddress": "255.255.255.255"
-          }
-        },
         {
           "name": "[variables('privateEndpointName')]",
           "type": "Microsoft.Network/privateEndpoints",
@@ -190,7 +177,7 @@
           }
         },
         {
-          "apiVersion": "2015-05-01-preview",
+          "apiVersion": "2021-08-01-preview",
           "type": "auditingSettings",
           "name": "Default",
           "dependsOn": [
@@ -200,7 +187,7 @@
             "state": "Enabled",
             "storageEndpoint": "[concat('https://', variables('staName'), '.blob.core.windows.net/')]",
             "storageAccountAccessKey": "[listKeys(resourceId('Microsoft.Storage/storageAccounts',variables('staName')), '2018-02-01').keys[0].value]",
-            "retentionDays": "30",
+            "retentionDays": 30,
             "auditActionsAndGroups": null,
             "auditLogsTableName": "[variables('sqlserverName')]"
           }
@@ -245,26 +232,20 @@
       ]
     },
     {
-      "comments": "Adding existing VNET to the SQL Server",
-      "type": "Microsoft.Sql/servers/virtualNetworkRules",
-      "name": "[concat(variables('sqlserverName'), '/', 'vNetServiceEndPoint')]",
-      "apiVersion": "2015-05-01-preview",
-      "scale": null,
-      "properties": {
-        "virtualNetworkSubnetId": "[variables('vNetServiceEndPoint')]"
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.Sql/servers', variables('sqlserverName'))]"
-      ]
-    },
-    {
       "type": "Microsoft.Sql/servers/databases",
       "name": "[concat(variables('sqlserverName'), '/', parameters('databases')[copyIndex()].name)]",
       "location": "[resourceGroup().location]",
-      "apiVersion": "2014-04-01",
+      "apiVersion": "2021-08-01-preview",
       "dependsOn": [
         "[resourceId('Microsoft.Sql/servers', variables('sqlserverName'))]"
       ],
+      "sku": {
+        "name": "[parameters('databases')[copyIndex()].serviceObjective]",
+        "tier": "[parameters('databases')[copyIndex()].tier]",
+        "family": "[parameters('databases')[copyIndex()].family]",
+        "capacity": "[parameters('databases')[copyIndex()].capacity]"
+      },
+      "kind": "v12.0,user,vcore,serverless",
       "copy": {
         "name": "dbCopy",
         "count": "[length(parameters('databases'))]"
@@ -274,9 +255,13 @@
       },
       "properties": {
         "collation": "[variables('sqldatabaseCollation')]",
-        "edition": "[parameters('databases')[copyIndex()].edition]",
+        "catalogCollation": "[variables('sqldatabaseCollation')]",
         "maxSizeBytes": "[parameters('databases')[copyIndex()].size]",
-        "requestedServiceObjectiveName": "[parameters('databases')[copyIndex()].serviceObjective]"
+        "zoneRedundant": false,
+        "readScale": "Disabled",
+        "autoPauseDelay": 60,
+        "storageAccountType": "LRS",  
+        "minCapacity": 0.5  
       },
       "resources": [
         {

@@ -1,0 +1,36 @@
+#YAML not tested, quickly thrown together
+on:
+  push:
+      branch: main
+      repository: "https://github.com/jargy001/Purple.git"
+
+mode: Incremental
+location: australiaeast
+
+name: YAMLDemo
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Login to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Checkout Sourcecode
+        uses: actions/checkout@main
+
+      - name: Deploy VNET Template
+        uses: jargy001/azure-action@v1
+        with:
+          resourceGroupName: TelstraTest
+          file: templates/networking.json
+          parameters_file: parameters/networking.parameters.json
+
+      - name: Deploy SQL Template
+        uses: jargy001/azure-action@v1
+        with:
+          resourceGroupName: TelstraTest
+          file: templates/sqldatabase.json
+          parameters_file: parameters/sqldatabase.parameters.json
