@@ -1,0 +1,303 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "companyCode": {
+      "type": "string",
+      "maxLength": 4
+    },
+    "companyName": {
+      "type": "string",
+      "maxLength": 128
+    },
+    "resourceType": {
+      "type": "string",
+      "maxLength": 128,
+      "defaultValue": "TelstraTest"
+    },
+    "resourceCode": {
+      "type": "string",
+      "maxLength": 4
+    },
+    "environmentCode": {
+      "type": "string",
+      "maxLength": 4
+    },
+    "environmentLongName": {
+      "type": "string",
+      "maxLength": 128
+    },
+    "azureLocation": {
+      "type": "string",
+      "defaultValue": "australiasoutheast",
+      "allowedValues": [
+        "australiaeast",
+        "australiasoutheast"
+      ]
+    },
+    "delimeter": {
+      "type": "string",
+      "defaultValue": "-",
+      "allowedValues": [
+        "-",
+        "_",
+        ""
+      ]
+    },
+    "sqlAdministratorLoginUsername": {
+      "type": "securestring",
+      "metadata": {
+        "description": "The password of the admin user of the SQL Server"
+      }
+    },
+    "databases": {
+      "type": "Array",
+      "defaultValue": [
+        {
+          "name": "database1",
+          "edition": "Standard",
+          "size": "S0",
+          "serviceObjective": "Standard"
+        },
+        {
+          "name": "database2",
+          "edition": "Standard",
+          "size": "S0",
+          "serviceObjective": "Standard"
+        }
+      ]
+    },
+    "vntName": {
+      "type": "string",
+      "defaultValue": "TEL-DEV-VNET-10.254.0.0"
+    },
+    "subnetName": {
+      "type": "string",
+      "defaultValue": "Application"
+    }
+  },
+  "variables": {
+    "keyVaultUri": "https://kv-demo-test-ja-tel.vault.azure.net/",
+    "secretName": "SQLAdmin",
+    "resourceIDSubnet": "[resourceId('Microsoft.Network/virtualNetworks/subnets',parameters('vntName'),parameters('subnetName'))]",
+    "privateEndpointName": "[concat('pe-', variables('sqlserverName'))]",
+    "sqldatabaseCollation": "SQL_Latin1_General_CP1_CI_AS",
+    "sqlserverName": "[concat(toLower(concat(parameters('companyCode'),parameters('delimeter'),parameters('environmentCode'),parameters('delimeter'),parameters('resourceCode'))),parameters('delimeter'),'001')]",
+    "sqlSRVTags": {
+      "Owner": "[parameters('companyName')]",
+      "Environment": "[parameters('environmentLongName')]",
+      "ResourceType": "[parameters('resourceType')]"
+    },
+    "staName": "[toLower(concat(parameters('companyCode'),parameters('environmentCode'),'sta',variables('staType'),'002'))]",
+    "staTags": {
+      "Owner": "[parameters('companyName')]",
+      "Environment": "[parameters('environmentLongName')]",
+      "StorageType": "Standard_LRS",
+      "Version": "StorageV2"
+    },
+    "staType": "LRS",
+    "vNetServiceEndPoint": "[variables('resourceIDSubnet')]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "name": "[variables('staName')]",
+      "apiVersion": "2018-07-01",
+      "location": "[parameters('azureLocation')]",
+      "kind": "BlobStorage",
+      "sku": {
+        "name": "Standard_LRS",
+        "tier": "Standard"
+      },
+      "tags": {
+        "Owner": "[variables('staTags').Owner]",
+        "Environment": "[variables('staTags').Environment]",
+        "StorageType": "[variables('staTags').StorageType]",
+        "Version": "[variables('staTags').Version]"
+      },
+      "dependsOn": [],
+      "properties": {
+        "accessTier": "Cool"
+      },
+      "resources": [
+        {
+          "type": "blobServices/containers",
+          "apiVersion": "2018-07-01",
+          "name": "[concat('default/', 'vulnerability-assessment')]",
+          "dependsOn": [
+            "[variables('staName')]"
+          ],
+          "properties": {
+            "publicAccess": "None"
+          }
+        }
+      ]
+    },
+    {
+      "name": "[variables('sqlserverName')]",
+      "type": "Microsoft.Sql/servers",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2014-04-01",
+      "dependsOn": [],
+      "tags": {
+        "Owner": "[variables('sqlSRVTags').Owner]",
+        "Environment": "[variables('sqlSRVTags').Environment]",
+        "ResourceType": "[variables('sqlSRVTags').ResourceType]"
+      },
+      "properties": {
+        "administratorLogin": "[parameters('sqlAdministratorLoginUsername')]",
+        "administratorLoginPassword": "[concat('@Microsoft.KeyVault(SecretUri=', variables('keyVaultUri'), '/secrets/', variables('secretName'), ')')]",
+        "version": "12.0"
+      },
+      "resources": [
+        {
+          "name": "Azure",
+          "type": "firewallRules",
+          "location": "[resourceGroup().location]",
+          "apiVersion": "2014-04-01",
+          "dependsOn": [
+            "[resourceId('Microsoft.Sql/servers', variables('sqlserverName'))]"
+          ],
+          "properties": {
+            "startIpAddress": "255.255.255.255",
+            "endIpAddress": "255.255.255.255"
+          }
+        },
+        {
+          "name": "[variables('privateEndpointName')]",
+          "type": "Microsoft.Network/privateEndpoints",
+          "location": "[parameters('azureLocation')]",
+          "apiVersion": "2021-02-01",
+          "dependsOn": [
+            "[resourceId('Microsoft.Sql/servers', variables('sqlserverName'))]"
+          ],
+          "properties": {
+            "privateLinkServiceConnections": [
+              {
+                "name": "sql-private-link",
+                "properties": {
+                  "privateLinkServiceId": "[resourceId('Microsoft.Sql/servers', variables('sqlserverName'))]",
+                  "groupIds": [
+                    "sqlServer"
+                  ]
+                }
+              }
+            ],
+            "manualPrivateLinkServiceConnections": [],
+            "subnet": {
+              "id": "[variables('resourceIDSubnet')]"
+            }
+          }
+        },
+        {
+          "apiVersion": "2015-05-01-preview",
+          "type": "auditingSettings",
+          "name": "Default",
+          "dependsOn": [
+            "[resourceId('Microsoft.Sql/servers', variables('sqlserverName'))]"
+          ],
+          "properties": {
+            "state": "Enabled",
+            "storageEndpoint": "[concat('https://', variables('staName'), '.blob.core.windows.net/')]",
+            "storageAccountAccessKey": "[listKeys(resourceId('Microsoft.Storage/storageAccounts',variables('staName')), '2018-02-01').keys[0].value]",
+            "retentionDays": "30",
+            "auditActionsAndGroups": null,
+            "auditLogsTableName": "[variables('sqlserverName')]"
+          }
+        },
+        {
+          "apiVersion": "2015-05-01-preview",
+          "type": "securityAlertPolicies",
+          "name": "DefaultSecurityAlert",
+          "dependsOn": [
+            "[resourceId('Microsoft.Sql/servers', variables('sqlserverName'))]"
+          ],
+          "properties": {
+            "state": "Enabled",
+            "disabledAlerts": "",
+            "emailAddresses": "admin@mycompany.com",
+            "emailAccountAdmins": "Disabled",
+            "storageEndpoint": "[concat('https://', variables('staName'), '.blob.core.windows.net/')]",
+            "storageAccountAccessKey": "[listKeys(resourceId('Microsoft.Storage/storageAccounts',variables('staName')), '2018-02-01').keys[0].value]"
+          }
+        },
+        {
+          "name": "DefaultAtpTemplate",
+          "type": "vulnerabilityAssessments",
+          "apiVersion": "2018-06-01-preview",
+          "dependsOn": [
+            "[resourceId('Microsoft.Sql/servers', variables('sqlserverName'))]",
+            "[concat('Microsoft.Storage/storageAccounts/', variables('staName'))]",
+            "DefaultSecurityAlert"
+          ],
+          "properties": {
+            "storageContainerPath": "[concat(reference(resourceId('Microsoft.Storage/storageAccounts', variables('staName'))).primaryEndpoints.blob, 'vulnerability-assessment')]",
+            "storageAccountAccessKey": "[listKeys(resourceId('Microsoft.Storage/storageAccounts',variables('staName')), '2018-02-01').keys[0].value]",
+            "recurringScans": {
+              "isEnabled": true,
+              "emailSubscriptionAdmins": true,
+              "emails": [
+                "admin@mycompany.com"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "comments": "Adding existing VNET to the SQL Server",
+      "type": "Microsoft.Sql/servers/virtualNetworkRules",
+      "name": "[concat(variables('sqlserverName'), '/', 'vNetServiceEndPoint')]",
+      "apiVersion": "2015-05-01-preview",
+      "scale": null,
+      "properties": {
+        "virtualNetworkSubnetId": "[variables('vNetServiceEndPoint')]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Sql/servers', variables('sqlserverName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Sql/servers/databases",
+      "name": "[concat(variables('sqlserverName'), '/', parameters('databases')[copyIndex()].name)]",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2014-04-01",
+      "dependsOn": [
+        "[resourceId('Microsoft.Sql/servers', variables('sqlserverName'))]"
+      ],
+      "copy": {
+        "name": "dbCopy",
+        "count": "[length(parameters('databases'))]"
+      },
+      "tags": {
+        "displayName": "sqldatabase"
+      },
+      "properties": {
+        "collation": "[variables('sqldatabaseCollation')]",
+        "edition": "[parameters('databases')[copyIndex()].edition]",
+        "maxSizeBytes": "[parameters('databases')[copyIndex()].size]",
+        "requestedServiceObjectiveName": "[parameters('databases')[copyIndex()].serviceObjective]"
+      },
+      "resources": [
+        {
+          "name": "current",
+          "type": "transparentDataEncryption",
+          "dependsOn": [
+            "[parameters('databases')[copyIndex()].name]"
+          ],
+          "location": "[parameters('azureLocation')]",
+          "apiVersion": "2014-04-01",
+          "properties": {
+            "status": "Enabled"
+          }
+        }
+      ]
+    }
+  ],
+  "outputs": {
+    "SqlServerName": {
+      "type": "string",
+      "value": "[variables('sqlserverName')]"
+    }
+  }
+}

@@ -1,0 +1,168 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "companyCode": {
+            "maxLength": 4,
+            "type": "String"
+        },
+        "companyName": {
+            "maxLength": 128,
+            "type": "String"
+        },
+        "resourceCode": {
+            "maxLength": 4,
+            "type": "String"
+        },
+        "environmentCode": {
+            "maxLength": 4,
+            "type": "String"
+        },
+        "environmentLongName": {
+            "maxLength": 128,
+            "type": "String"
+        },
+        "azureLocation": {
+            "defaultValue": "australiasoutheast",
+            "allowedValues": [
+                "australiaeast",
+                "australiasoutheast"
+            ],
+            "type": "String"
+        },
+        "delimeter": {
+            "defaultValue": "-",
+            "allowedValues": [
+                "-",
+                "_",
+                ""
+            ],
+            "type": "String"
+        },
+        "vnetAddressPrefix": {
+            "defaultValue": "10.254.0.0/24",
+            "type": "String"
+        },
+        "subnetPrefix": {
+            "defaultValue": "10.254.0.0/25",
+            "type": "String"
+        },
+        "subnetName": {
+            "defaultValue": "Application",
+            "type": "String"
+        }
+    },
+    "variables": {
+        "vntName": "[concat(toUpper(concat(parameters('companyCode'),parameters('delimeter'),parameters('environmentCode'),parameters('delimeter'),parameters('resourceCode'))),parameters('delimeter'),substring(parameters('vnetAddressPrefix'), 0, lastIndexOf(parameters('vnetAddressPrefix'), '/')))]",
+        "vntTags": {
+            "Owner": "[parameters('companyName')]",
+            "Environment": "[parameters('environmentLongName')]"
+        },
+        "nsgName": "[concat(toUpper(concat(parameters('companyCode'),parameters('delimeter'),parameters('environmentCode'),parameters('delimeter'),'NSG')),parameters('delimeter'),parameters('subnetName'))]"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Network/networkSecurityGroups/securityRules",
+            "apiVersion": "2022-07-01",
+            "name": "[concat(variables('nsgName'), '/AllowTagMS_SQLInbound')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]"
+            ],
+            "properties": {
+                "protocol": "TCP",
+                "sourcePortRange": "*",
+                "destinationPortRange": "1433",
+                "sourceAddressPrefix": "VirtualNetwork",
+                "destinationAddressPrefix": "*",
+                "access": "Allow",
+                "priority": 100,
+                "direction": "Inbound",
+                "sourcePortRanges": [],
+                "destinationPortRanges": [],
+                "sourceAddressPrefixes": [],
+                "destinationAddressPrefixes": []
+            }
+        },
+        {
+            "type": "Microsoft.Network/networkSecurityGroups/securityRules",
+            "apiVersion": "2022-07-01",
+            "name": "[concat(variables('nsgName'), '/DenyAnyCustomAnyInbound')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]"
+            ],
+            "properties": {
+                "protocol": "*",
+                "sourcePortRange": "*",
+                "destinationPortRange": "*",
+                "sourceAddressPrefix": "*",
+                "destinationAddressPrefix": "*",
+                "access": "Deny",
+                "priority": 110,
+                "direction": "Inbound",
+                "sourcePortRanges": [],
+                "destinationPortRanges": [],
+                "sourceAddressPrefixes": [],
+                "destinationAddressPrefixes": []
+            }
+        },
+        {
+            "type": "Microsoft.Network/networkSecurityGroups",
+            "apiVersion": "2018-07-01",
+            "name": "[variables('nsgName')]",
+            "location": "[parameters('azureLocation')]",
+            "resources": []
+        },
+        {
+            "type": "Microsoft.Network/virtualNetworks",
+            "apiVersion": "2018-10-01",
+            "name": "[variables('vntName')]",
+            "location": "[parameters('azureLocation')]",
+            "dependsOn": [
+                "[variables('nsgName')]"
+            ],
+            "tags": "[variables('vntTags')]",
+            "properties": {
+                "addressSpace": {
+                    "addressPrefixes": [
+                        "[parameters('vnetAddressPrefix')]"
+                    ]
+                },
+                "subnets": [
+                    {
+                        "name": "[parameters('subnetName')]",
+                        "properties": {
+                            "addressPrefix": "[parameters('subnetPrefix')]",
+                            "networkSecurityGroup": {
+                                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]"
+                            },
+                            "serviceEndpoints": [
+                                {
+                                    "provisioningState": "Succeeded",
+                                    "service": "Microsoft.Storage",
+                                    "locations": [
+                                        "australiaeast",
+                                        "australiasoutheast"
+                                    ]
+                                },
+                                {
+                                    "provisioningState": "Succeeded",
+                                    "service": "Microsoft.Sql",
+                                    "locations": [
+                                        "australiaeast",
+                                        "australiasoutheast"
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        }
+    ],
+    "outputs": {
+        "resourceIDSubnet": {
+            "type": "String",
+            "value": "[resourceId('Microsoft.Network/virtualNetworks/subnets',variables('vntName'),parameters('subnetName'))]"
+        }
+    }
+}

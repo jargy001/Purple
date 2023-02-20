@@ -1,0 +1,36 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "companyCode": {
+            "value": "TEL" 
+        },
+        "companyName": {
+            "value": "DemoTEL" 
+        },
+        "resourceCode": {
+            "value": "VNET" 
+        },
+        "environmentCode": {
+            "value": "DEV" 
+        },
+        "environmentLongName": {
+            "value": "Development" 
+        },
+        "azureLocation": {
+            "value": "australiaeast"
+        },
+        "delimeter": {
+            "value": "-"
+        },
+        "vnetAddressPrefix": {
+            "value": "10.254.0.0/24"
+        },
+        "subnetPrefix": {
+            "value": "10.254.0.0/25"
+        },
+        "subnetName": {
+            "value": "Application"
+        }
+    }
+}

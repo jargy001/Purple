@@ -1,0 +1,45 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "companyCode": {
+            "value": "TEL" 
+        },
+        "companyName": {
+            "value": "TestCompany" 
+        },
+        "resourceType": {
+            "value": "SQL Server" 
+        },
+        "resourceCode": {
+            "value": "SQL" 
+        },
+        "environmentCode": {
+            "value": "DEV" 
+        },
+        "environmentLongName": {
+            "value": "Development" 
+        },
+        "azureLocation": {
+            "value": "australiaeast"
+        },
+        "delimeter": {
+            "value": "-"
+        },
+        "sqlAdministratorLoginUsername": {
+            "value": "AdminTest001" 
+        },
+        "databases": {
+            "value": [
+                {"name": "database1",
+                "edition": "Standard",
+                "size": "",
+                "serviceObjective": ""},
+                {"name": "database2",
+                "edition": "Standard",
+                "size": "",
+                "serviceObjective": ""}
+            ]
+        }
+    }
+}
