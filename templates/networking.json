@@ -10,6 +10,10 @@
             "maxLength": 128,
             "type": "String"
         },
+        "resourceGroupName": {
+            "type": "String",
+            "defaultvalue": "TelstraTest"
+        },
         "resourceCode": {
             "maxLength": 4,
             "type": "String"
@@ -62,11 +66,20 @@
     },
     "resources": [
         {
+            "condition": "[not(contains(resourceGroup().name, parameters('resourceGroupName')))]",
+            "type": "Microsoft.Resources/resourceGroups",
+            "apiVersion": "2022-02-01",
+            "name": "[parameters('resourceGroupName')]",
+            "location": "[parameters('azureLocation')]",
+            "properties": {}
+        },
+        {
             "type": "Microsoft.Network/networkSecurityGroups/securityRules",
             "apiVersion": "2022-07-01",
             "name": "[concat(variables('nsgName'), '/AllowTagMS_SQLInbound')]",
             "dependsOn": [
-                "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]"
+                "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]",
+                "[resourceId('Microsoft.Resources/resourceGroups', parameters('resourceGroupName'))]"
             ],
             "properties": {
                 "protocol": "TCP",
@@ -88,7 +101,8 @@
             "apiVersion": "2022-07-01",
             "name": "[concat(variables('nsgName'), '/DenyAnyCustomAnyInbound')]",
             "dependsOn": [
-                "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]"
+                "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsgName'))]",
+                "[resourceId('Microsoft.Resources/resourceGroups', parameters('resourceGroupName'))]"
             ],
             "properties": {
                 "protocol": "*",
@@ -118,7 +132,8 @@
             "name": "[variables('vntName')]",
             "location": "[parameters('azureLocation')]",
             "dependsOn": [
-                "[variables('nsgName')]"
+                "[variables('nsgName')]",
+                "[resourceId('Microsoft.Resources/resourceGroups', parameters('resourceGroupName'))]"
             ],
             "tags": "[variables('vntTags')]",
             "properties": {
